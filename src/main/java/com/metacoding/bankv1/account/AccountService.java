@@ -23,41 +23,25 @@ public class AccountService {
     }
 
     @Transactional
-    public void 계좌이체(AccountRequest.TransferDTO transferDTO, int userId) {
-        // 1. 출금 계좌 조회, 없으면 RuntimeException
+    public void 계좌이체(AccountRequest.TransferDTO transferDTO, int sessionUserId) {
         Account withdrawAccount = accountRepository.findByNumber(transferDTO.getWithdrawNumber());
         if (withdrawAccount == null) throw new RuntimeException("출금 계좌가 존재하지 않습니다");
 
-        // 2. 입금 계좌 조회, 없으면 RuntimeException
         Account depositAccount = accountRepository.findByNumber(transferDTO.getDepositNumber());
         if (depositAccount == null) throw new RuntimeException("입금 계좌가 존재하지 않습니다");
 
-        // 3. 출금 계좌의 잔액 검사
-        if (withdrawAccount.getBalance() < transferDTO.getAmount()) {
-            throw new RuntimeException("출금 계좌의 잔액 : " + withdrawAccount.getBalance() + ", 이체하려는 금액 : " + transferDTO.getAmount());
-        }
+        withdrawAccount.잔액검사(transferDTO.getAmount());
 
-        // 4. 출금 비밀번호 확인해서 동일한지 체크
-        if (!(withdrawAccount.getPassword().equals(transferDTO.getWithdrawPassword()))) {
-            throw new RuntimeException("출금 계좌 비밀번호가 틀렸습니다");
-        }
+        withdrawAccount.비밀번호검사(transferDTO.getWithdrawPassword());
 
-        // 5. 출금계좌 주인이 맞는지 확인 (로그인한 유저가)
-        if (!(withdrawAccount.getUserId().equals(userId))) {
-            throw new RuntimeException("출금계좌의 권한이 없습니다");
-        }
+        withdrawAccount.계좌주인검사(sessionUserId);
 
-        // 5. Account Update 출금계좌
-        int withdrawBalance = withdrawAccount.getBalance();
-        withdrawBalance = withdrawBalance - transferDTO.getAmount();
-        accountRepository.updateByNumber(withdrawBalance, withdrawAccount.getPassword(), withdrawAccount.getNumber());
+        withdrawAccount.출금(transferDTO.getAmount());
+        accountRepository.updateByNumber(withdrawAccount.getBalance(), withdrawAccount.getPassword(), withdrawAccount.getNumber());
 
-        // 6. Account Update 입금계좌
-        int depositBalance = depositAccount.getBalance();
-        depositBalance = depositBalance + transferDTO.getAmount();
-        accountRepository.updateByNumber(depositBalance, depositAccount.getPassword(), depositAccount.getNumber());
+        depositAccount.입금(transferDTO.getAmount());
+        accountRepository.updateByNumber(depositAccount.getBalance(), depositAccount.getPassword(), depositAccount.getNumber());
 
-        // 7. History Save
-        historyRepository.save(transferDTO.getWithdrawNumber(), transferDTO.getDepositNumber(), transferDTO.getAmount(), withdrawBalance);
+        historyRepository.save(transferDTO.getWithdrawNumber(), transferDTO.getDepositNumber(), transferDTO.getAmount(), withdrawAccount.getBalance());
     }
 }
